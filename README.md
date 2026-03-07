@@ -21,6 +21,8 @@ Configured in `config/packages.json`:
 - Google Chrome (`Google.Chrome`)
 - Neovim (`Neovim.Neovim`)
 - Git (`Git.Git`)
+- Claude Code CLI (`Anthropic.ClaudeCode`)
+- Codex CLI (`OpenAI.Codex`)
 
 You can add/remove packages anytime by editing that file.
 

@@ -14,5 +14,13 @@
   {
     "name": "Git",
     "id": "Git.Git"
+  },
+  {
+    "name": "Claude Code CLI",
+    "id": "Anthropic.ClaudeCode"
+  },
+  {
+    "name": "Codex CLI",
+    "id": "OpenAI.Codex"
   }
 ]
