@@ -11,7 +11,7 @@ Automate setup on shared school computers:
 Open **PowerShell** (normal user is fine unless your school policy requires admin):
 
 ```powershell
-Set-ExecutionPolicy -Scope Process Bypass -Force
+Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
 ./bootstrap.ps1
 ```
 
@@ -22,7 +22,7 @@ On a fresh SENAC Windows computer:
 ```powershell
 git clone https://github.com/jdserenity/senac-bootstrap.git
 cd senac-bootstrap
-Set-ExecutionPolicy -Scope Process Bypass -Force
+Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
 ./bootstrap.ps1
 ```
 

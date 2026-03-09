@@ -202,7 +202,7 @@ function Install-WingetPackage {
     }
 
     try {
-        winget install --id $Id -e --accept-source-agreements --accept-package-agreements --silent --disable-interactivity
+        winget install --id $Id -e --accept-source-agreements --accept-package-agreements --silent --disable-interactivity --scope user
         $script:Installed.Add("$Name ($Id)")
         Set-TaskStatus -Index $TaskIndex -Status "installed" -Details "Installed"
     }
