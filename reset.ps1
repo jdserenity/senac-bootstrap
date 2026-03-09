@@ -12,7 +12,6 @@ if (-not $Force) {
     Write-Host "This will uninstall everything bootstrap.ps1 installs:" -ForegroundColor Yellow
     Write-Host "  - All winget packages in config/packages.json"
     Write-Host "  - All npm global packages in config/npm-packages.json (Claude Code, Codex, Gemini)"
-    Write-Host "  - WSL Ubuntu-24.04 distro (wsl --unregister) - this deletes all WSL data"
     Write-Host "  - Neovim config at %LOCALAPPDATA%\nvim"
     Write-Host ""
     Write-Host "Run with -Force to proceed: ./reset.ps1 -Force" -ForegroundColor Yellow
@@ -31,33 +30,6 @@ if (-not (Test-Path $packageFile)) {
 }
 else {
     $packages = Get-Content -Raw -Path $packageFile | ConvertFrom-Json
-}
-
-Write-Host ""
-Write-Host "=== Unregistering WSL Ubuntu ===" -ForegroundColor Cyan
-
-if (Test-CommandExists -CommandName "wsl") {
-    $distros = @("Ubuntu-24.04", "Ubuntu")
-    foreach ($distro in $distros) {
-        Write-Host "Attempting: wsl --unregister $distro" -ForegroundColor DarkCyan
-        wsl --unregister $distro 2>$null
-    }
-}
-else {
-    Write-Host "WSL not found - skipping distro unregister." -ForegroundColor Yellow
-}
-
-Write-Host ""
-Write-Host "=== Uninstalling winget packages ===" -ForegroundColor Cyan
-
-if (Test-CommandExists -CommandName "winget") {
-    foreach ($pkg in $packages) {
-        Write-Host "Uninstalling $($pkg.name) ($($pkg.id))..." -ForegroundColor DarkCyan
-        winget uninstall --id $pkg.id -e --disable-interactivity 2>$null
-    }
-}
-else {
-    Write-Host "winget not found - skipping package uninstalls." -ForegroundColor Yellow
 }
 
 Write-Host ""
@@ -82,6 +54,19 @@ if (Test-CommandExists -CommandName "npm") {
 }
 else {
     Write-Host "npm not found - skipping npm package uninstalls." -ForegroundColor Yellow
+}
+
+Write-Host ""
+Write-Host "=== Uninstalling winget packages ===" -ForegroundColor Cyan
+
+if (Test-CommandExists -CommandName "winget") {
+    foreach ($pkg in $packages) {
+        Write-Host "Uninstalling $($pkg.name) ($($pkg.id))..." -ForegroundColor DarkCyan
+        winget uninstall --id $pkg.id -e --disable-interactivity 2>$null
+    }
+}
+else {
+    Write-Host "winget not found - skipping package uninstalls." -ForegroundColor Yellow
 }
 
 Write-Host ""
@@ -118,6 +103,3 @@ else {
 Write-Host ""
 Write-Host "Reset complete." -ForegroundColor Green
 Write-Host "You can now re-run bootstrap.ps1 for a clean install." -ForegroundColor Green
-Write-Host ""
-Write-Host "Note: After WSL + Ubuntu reinstall, open Ubuntu 24.04 from the Start Menu," -ForegroundColor Yellow
-Write-Host "complete first-time setup, then re-run bootstrap.ps1." -ForegroundColor Yellow
