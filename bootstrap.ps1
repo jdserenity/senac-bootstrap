@@ -439,6 +439,64 @@ function Install-NeovimPortable {
     Render-Dashboard -CurrentStep "Install Neovim"
 }
 
+function Set-TaskbarPins {
+    param([int]$TaskIndex)
+
+    $pinItems = @("Vivaldi", "Windows Terminal")
+    $pinLabel = $pinItems -join ", "
+
+    Set-TaskStatus -Index $TaskIndex -Status "running" -Details "Pinning: $pinLabel"
+    Write-Log "Applying taskbar pins: $pinLabel"
+    Render-Dashboard -CurrentStep "Pin taskbar items"
+
+    if ($DryRun) {
+        $script:Skipped.Add("Taskbar pins [dry-run]")
+        Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "Dry run: would pin $pinLabel"
+        Render-Dashboard -CurrentStep "Pin taskbar items"
+        return
+    }
+
+    try {
+        $xmlDir  = Join-Path $env:LOCALAPPDATA "Microsoft\Windows\Shell"
+        $xmlPath = Join-Path $xmlDir "LayoutModification.xml"
+
+        if (-not (Test-Path $xmlDir)) {
+            New-Item -ItemType Directory -Path $xmlDir -Force | Out-Null
+        }
+
+        $xml = @'
+<?xml version="1.0" encoding="utf-8"?>
+<LayoutModificationTemplate
+    xmlns="http://schemas.microsoft.com/Start/2014/LayoutModification"
+    xmlns:defaultlayout="http://schemas.microsoft.com/Start/2014/FullDefaultLayout"
+    xmlns:start="http://schemas.microsoft.com/Start/2014/StartLayout"
+    xmlns:taskbar="http://schemas.microsoft.com/Start/2014/TaskbarLayout"
+    Version="1">
+  <CustomTaskbarLayoutCollection>
+    <defaultlayout:TaskbarLayout>
+      <taskbar:TaskbarPinList>
+        <taskbar:DesktopApp DesktopApplicationLinkPath="%APPDATA%\Microsoft\Windows\Start Menu\Programs\Vivaldi\Vivaldi.lnk"/>
+        <taskbar:DesktopApp DesktopApplicationLinkPath="%LOCALAPPDATA%\Microsoft\WindowsApps\wt.exe"/>
+      </taskbar:TaskbarPinList>
+    </defaultlayout:TaskbarLayout>
+  </CustomTaskbarLayoutCollection>
+</LayoutModificationTemplate>
+'@
+
+        Set-Content -Path $xmlPath -Value $xml -Encoding UTF8
+        Write-Log "LayoutModification.xml written to $xmlPath"
+        $script:Installed.Add("Taskbar pins ($pinLabel)")
+        Set-TaskStatus -Index $TaskIndex -Status "completed" -Details "Log off and back on to apply"
+        Add-ManualStep "Taskbar pins written. Log off and log back in (or run: Stop-Process -Name explorer -Force) to see Vivaldi and Windows Terminal pinned."
+    }
+    catch {
+        $script:Failed.Add("Taskbar pins")
+        Set-TaskStatus -Index $TaskIndex -Status "failed" -Details "Failed: $($_.Exception.Message)"
+        Add-ManualStep "Taskbar pinning failed: $($_.Exception.Message)"
+    }
+    Render-Dashboard -CurrentStep "Pin taskbar items"
+}
+
 function Apply-NvimConfigFromDotfiles {
     param(
         [string]$RepoUrl,
@@ -554,6 +612,7 @@ foreach ($npkg in $npmPackages) {
 }
 $nvimInstallTask = Add-Task -Title "Install Neovim"
 $nvimTask = Add-Task -Title "Setup Neovim config"
+$taskbarPinTask = Add-Task -Title "Pin taskbar items: Vivaldi, Windows Terminal"
 
 Render-Dashboard -CurrentStep "Starting bootstrap"
 
@@ -639,6 +698,8 @@ if (-not $DryRun -and (Test-CommandExists "npm")) {
 }
 
 Apply-NvimConfigFromDotfiles -RepoUrl $DotfilesRepoUrl -SubPath $DotfilesSubPath -TaskIndex $nvimTask
+
+Set-TaskbarPins -TaskIndex $taskbarPinTask
 
 Add-ManualStep "All winget installs run as your user (no admin needed). If one fails anyway, IT may have blocked that specific package - ask them to allow it."
 Add-ManualStep "Claude Code, Codex CLI, and Gemini CLI require auth - after install, open a new PowerShell window and run 'claude', 'codex', or 'gemini' to sign in interactively."
