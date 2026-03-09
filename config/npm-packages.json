@@ -2,16 +2,19 @@
   {
     "name": "Claude Code CLI",
     "package": "@anthropic-ai/claude-code",
-    "cmd": "claude"
+    "cmd": "claude",
+    "openCmd": "claude"
   },
   {
     "name": "Codex CLI",
     "package": "@openai/codex",
-    "cmd": "codex"
+    "cmd": "codex",
+    "openCmd": "codex"
   },
   {
     "name": "Gemini CLI",
     "package": "@google/gemini-cli",
-    "cmd": "gemini"
+    "cmd": "gemini",
+    "openCmd": "gemini"
   }
 ]

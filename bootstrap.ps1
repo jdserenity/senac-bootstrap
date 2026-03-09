@@ -196,13 +196,30 @@ function Open-AppAfterInstall {
     }
 }
 
+function Open-InNewTerminalTab {
+    param([string]$Cmd)
+    if ([string]::IsNullOrWhiteSpace($Cmd)) { return }
+    try {
+        if (Test-CommandExists "wt") {
+            Start-Process wt -ArgumentList "new-tab", "--", "pwsh", "-NoExit", "-Command", $Cmd
+        }
+        else {
+            Start-Process powershell -ArgumentList "-NoExit", "-Command", $Cmd
+        }
+    }
+    catch {
+        # Silently ignore launch errors — install succeeded even if open fails.
+    }
+}
+
 function Install-WingetPackage {
     param(
         [string]$Name,
         [string]$Id,
         [int]$TaskIndex,
         [string]$Scope = "user",
-        [string]$LaunchCmd = ""
+        [string]$LaunchCmd = "",
+        [string]$CheckCmd = ""
     )
 
     Set-TaskStatus -Index $TaskIndex -Status "running" -Details "Checking existing install"
@@ -212,6 +229,15 @@ function Install-WingetPackage {
     if ($DryRun -and $Mac) {
         $script:Skipped.Add("$Name ($Id) [dry-run]")
         Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "Dry run (mac): would check/install"
+        Render-Dashboard -CurrentStep "Install $Name"
+        return
+    }
+
+    # Skip if the command is already on PATH (catches non-winget installs e.g. pre-imaged machines)
+    if (-not [string]::IsNullOrWhiteSpace($CheckCmd) -and (Test-CommandExists -CommandName $CheckCmd)) {
+        Write-Log "$Name already on PATH ($CheckCmd), skipping."
+        $script:Skipped.Add("$Name ($Id)")
+        Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "Already on PATH"
         Render-Dashboard -CurrentStep "Install $Name"
         return
     }
@@ -254,7 +280,8 @@ function Install-NpmPackageGlobal {
         [string]$Name,
         [string]$Package,
         [string]$Cmd,
-        [int]$TaskIndex
+        [int]$TaskIndex,
+        [string]$OpenCmd = ""
     )
 
     Set-TaskStatus -Index $TaskIndex -Status "running" -Details "Checking install"
@@ -293,10 +320,25 @@ function Install-NpmPackageGlobal {
 
     Write-Log "Running: npm install -g $Package"
     try {
-        npm install -g $Package
+        # Codex has a Windows-specific bug (introduced in v0.100.0) where the
+        # platform optional dep (@openai/codex-win32-x64) isn't on the registry.
+        # Workaround: install the current version and alias the win32 dist-tag.
+        if ($Package -eq "@openai/codex") {
+            $v = (& npm view @openai/codex version 2>$null).Trim()
+            if ($v) {
+                npm install -g "@openai/codex@$v" "@openai/codex-win32-x64@npm:@openai/codex@$v-win32-x64" --loglevel=error
+            }
+            else {
+                npm install -g $Package --loglevel=error
+            }
+        }
+        else {
+            npm install -g $Package --loglevel=error
+        }
         Write-Log "$Name installed successfully."
         $script:Installed.Add("$Name ($Package)")
         Set-TaskStatus -Index $TaskIndex -Status "installed" -Details "Installed"
+        Open-InNewTerminalTab -Cmd $OpenCmd
     }
     catch {
         $script:Failed.Add("$Name ($Package)")
@@ -539,7 +581,8 @@ Render-Dashboard -CurrentStep "Preflight checks"
 foreach ($pkg in $packages) {
     $scope     = if ($pkg.PSObject.Properties["scope"])     { $pkg.scope }     else { "user" }
     $launchCmd = if ($pkg.PSObject.Properties["launchCmd"]) { $pkg.launchCmd } else { "" }
-    Install-WingetPackage -Name $pkg.name -Id $pkg.id -TaskIndex $packageTaskMap[$pkg.id] -Scope $scope -LaunchCmd $launchCmd
+    $checkCmd  = if ($pkg.PSObject.Properties["checkCmd"])  { $pkg.checkCmd }  else { "" }
+    Install-WingetPackage -Name $pkg.name -Id $pkg.id -TaskIndex $packageTaskMap[$pkg.id] -Scope $scope -LaunchCmd $launchCmd -CheckCmd $checkCmd
 }
 
 Install-NeovimPortable -TaskIndex $nvimInstallTask
@@ -565,7 +608,8 @@ if (-not (Test-CommandExists "npm")) {
 }
 
 foreach ($npkg in $npmPackages) {
-    Install-NpmPackageGlobal -Name $npkg.name -Package $npkg.package -Cmd $npkg.cmd -TaskIndex $npmPackageTaskMap[$npkg.package]
+    $openCmd = if ($npkg.PSObject.Properties["openCmd"]) { $npkg.openCmd } else { "" }
+    Install-NpmPackageGlobal -Name $npkg.name -Package $npkg.package -Cmd $npkg.cmd -TaskIndex $npmPackageTaskMap[$npkg.package] -OpenCmd $openCmd
 }
 
 Apply-NvimConfigFromDotfiles -RepoUrl $DotfilesRepoUrl -SubPath $DotfilesSubPath -TaskIndex $nvimTask
