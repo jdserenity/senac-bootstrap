@@ -4,11 +4,6 @@
     "id": "Vivaldi.Vivaldi"
   },
   {
-    "name": "Neovim",
-    "id": "Neovim.Neovim",
-    "scope": "machine"
-  },
-  {
     "name": "WSL",
     "id": "Microsoft.WSL"
   },

@@ -362,6 +362,78 @@ function Install-WslNpmPackage {
     Render-Dashboard -CurrentStep "Install $Name in WSL"
 }
 
+function Install-NeovimPortable {
+    param([int]$TaskIndex)
+
+    Set-TaskStatus -Index $TaskIndex -Status "running" -Details "Checking existing install"
+    Render-Dashboard -CurrentStep "Install Neovim"
+
+    if ($DryRun -and $Mac) {
+        $script:Skipped.Add("Neovim [dry-run]")
+        Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "Dry run (mac): would install portable Neovim"
+        Render-Dashboard -CurrentStep "Install Neovim"
+        return
+    }
+
+    $installDir = Join-Path $env:LOCALAPPDATA "Programs\Neovim"
+    $nvimExe    = Join-Path $installDir "bin\nvim.exe"
+
+    if (Test-Path $nvimExe) {
+        $script:Skipped.Add("Neovim (already installed at $installDir)")
+        Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "Already installed"
+        Render-Dashboard -CurrentStep "Install Neovim"
+        return
+    }
+
+    if ($DryRun) {
+        $script:Skipped.Add("Neovim [dry-run]")
+        Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "Dry run: would download and extract portable Neovim"
+        Render-Dashboard -CurrentStep "Install Neovim"
+        return
+    }
+
+    $zipUrl  = "https://github.com/neovim/neovim/releases/download/stable/nvim-win64.zip"
+    $zipPath = Join-Path $env:TEMP "nvim-win64.zip"
+
+    try {
+        Set-TaskStatus -Index $TaskIndex -Status "running" -Details "Downloading nvim-win64.zip"
+        Render-Dashboard -CurrentStep "Install Neovim"
+        Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing
+
+        Set-TaskStatus -Index $TaskIndex -Status "running" -Details "Extracting"
+        Render-Dashboard -CurrentStep "Install Neovim"
+        $extractTemp = Join-Path $env:TEMP "nvim-win64-extract"
+        if (Test-Path $extractTemp) { Remove-Item $extractTemp -Recurse -Force }
+        Expand-Archive -Path $zipPath -DestinationPath $extractTemp -Force
+
+        # The zip contains a single top-level folder (e.g. nvim-win64); move its contents to installDir
+        $inner = Get-ChildItem $extractTemp | Select-Object -First 1
+        if (Test-Path $installDir) { Remove-Item $installDir -Recurse -Force }
+        Move-Item $inner.FullName $installDir
+
+        # Add bin dir to user PATH if not already present
+        $binDir     = Join-Path $installDir "bin"
+        $currentPath = [Environment]::GetEnvironmentVariable("Path", "User")
+        if ($currentPath -notlike "*$binDir*") {
+            [Environment]::SetEnvironmentVariable("Path", "$currentPath;$binDir", "User")
+            $env:Path += ";$binDir"
+        }
+
+        $script:Installed.Add("Neovim (portable, $installDir)")
+        Set-TaskStatus -Index $TaskIndex -Status "installed" -Details "Installed to $installDir"
+    }
+    catch {
+        $script:Failed.Add("Neovim")
+        Set-TaskStatus -Index $TaskIndex -Status "failed" -Details "Download/extract failed: $($_.Exception.Message)"
+        Add-ManualStep "Neovim install failed. Download nvim-win64.zip from https://github.com/neovim/neovim/releases/latest, extract to $installDir, and add $installDir\bin to your user PATH."
+    }
+    finally {
+        if (Test-Path $zipPath) { Remove-Item $zipPath -Force -ErrorAction SilentlyContinue }
+        if (Test-Path $extractTemp) { Remove-Item $extractTemp -Recurse -Force -ErrorAction SilentlyContinue }
+    }
+    Render-Dashboard -CurrentStep "Install Neovim"
+}
+
 function Apply-NvimConfigFromDotfiles {
     param(
         [string]$RepoUrl,
@@ -473,6 +545,7 @@ $wslPackageTaskMap = @{}
 foreach ($wpkg in $wslPackages) {
     $wslPackageTaskMap[$wpkg.package] = Add-Task -Title ("Install {0} in WSL" -f $wpkg.name)
 }
+$nvimInstallTask = Add-Task -Title "Install Neovim"
 $nvimTask = Add-Task -Title "Setup Neovim config"
 
 Render-Dashboard -CurrentStep "Starting bootstrap"
@@ -501,6 +574,8 @@ foreach ($pkg in $packages) {
     $scope = if ($pkg.PSObject.Properties["scope"]) { $pkg.scope } else { "user" }
     Install-WingetPackage -Name $pkg.name -Id $pkg.id -TaskIndex $packageTaskMap[$pkg.id] -Scope $scope
 }
+
+Install-NeovimPortable -TaskIndex $nvimInstallTask
 
 Ensure-WslNode -TaskIndex $wslNodeTask
 
