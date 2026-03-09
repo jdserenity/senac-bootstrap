@@ -170,12 +170,24 @@ function Write-FinalReport {
     $script:ManualSteps | Select-Object -Unique | ForEach-Object { Write-Host "- $_" }
 }
 
+function Open-AppAfterInstall {
+    param([string]$Cmd)
+    if ([string]::IsNullOrWhiteSpace($Cmd)) { return }
+    try {
+        Start-Process $Cmd -ErrorAction Stop
+    }
+    catch {
+        # Silently ignore launch errors — install succeeded even if open fails.
+    }
+}
+
 function Install-WingetPackage {
     param(
         [string]$Name,
         [string]$Id,
         [int]$TaskIndex,
-        [string]$Scope = "user"
+        [string]$Scope = "user",
+        [string]$LaunchCmd = ""
     )
 
     Set-TaskStatus -Index $TaskIndex -Status "running" -Details "Checking existing install"
@@ -207,6 +219,7 @@ function Install-WingetPackage {
     if ($LASTEXITCODE -eq 0) {
         $script:Installed.Add("$Name ($Id)")
         Set-TaskStatus -Index $TaskIndex -Status "installed" -Details "Installed"
+        Open-AppAfterInstall -Cmd $LaunchCmd
     }
     else {
         $script:Failed.Add("$Name ($Id)")
@@ -422,6 +435,19 @@ function Install-NeovimPortable {
 
         $script:Installed.Add("Neovim (portable, $installDir)")
         Set-TaskStatus -Index $TaskIndex -Status "installed" -Details "Installed to $installDir"
+
+        # Open Neovim in a new terminal tab (Windows Terminal preferred, new window as fallback)
+        try {
+            if (Test-CommandExists "wt") {
+                Start-Process wt -ArgumentList "new-tab", "--", "pwsh", "-NoExit", "-Command", "`"& '$nvimExe'`""
+            }
+            else {
+                Start-Process powershell -ArgumentList "-NoExit", "-Command", "& '$nvimExe'"
+            }
+        }
+        catch {
+            # Silently ignore — install succeeded even if open fails.
+        }
     }
     catch {
         $script:Failed.Add("Neovim")
@@ -572,8 +598,9 @@ else {
 Render-Dashboard -CurrentStep "Preflight checks"
 
 foreach ($pkg in $packages) {
-    $scope = if ($pkg.PSObject.Properties["scope"]) { $pkg.scope } else { "user" }
-    Install-WingetPackage -Name $pkg.name -Id $pkg.id -TaskIndex $packageTaskMap[$pkg.id] -Scope $scope
+    $scope     = if ($pkg.PSObject.Properties["scope"])     { $pkg.scope }     else { "user" }
+    $launchCmd = if ($pkg.PSObject.Properties["launchCmd"]) { $pkg.launchCmd } else { "" }
+    Install-WingetPackage -Name $pkg.name -Id $pkg.id -TaskIndex $packageTaskMap[$pkg.id] -Scope $scope -LaunchCmd $launchCmd
 }
 
 Install-NeovimPortable -TaskIndex $nvimInstallTask

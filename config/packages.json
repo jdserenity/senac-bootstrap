@@ -1,7 +1,8 @@
 [
   {
     "name": "Vivaldi",
-    "id": "Vivaldi.Vivaldi"
+    "id": "Vivaldi.Vivaldi",
+    "launchCmd": "vivaldi"
   },
   {
     "name": "WSL",
