@@ -5,11 +5,8 @@
     "launchCmd": "vivaldi"
   },
   {
-    "name": "WSL",
-    "id": "Microsoft.WSL"
-  },
-  {
-    "name": "Ubuntu 24.04",
-    "id": "Canonical.Ubuntu.2404"
+    "name": "Node.js LTS",
+    "id": "OpenJS.NodeJS.LTS",
+    "scope": "user"
   }
 ]
