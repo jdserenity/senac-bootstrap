@@ -174,7 +174,8 @@ function Install-WingetPackage {
     param(
         [string]$Name,
         [string]$Id,
-        [int]$TaskIndex
+        [int]$TaskIndex,
+        [string]$Scope = "user"
     )
 
     Set-TaskStatus -Index $TaskIndex -Status "running" -Details "Checking existing install"
@@ -201,15 +202,16 @@ function Install-WingetPackage {
         return
     }
 
-    try {
-        winget install --id $Id -e --accept-source-agreements --accept-package-agreements --silent --disable-interactivity --scope user
+    $scopeArg = if ($Scope) { @("--scope", $Scope) } else { @() }
+    winget install --id $Id -e --accept-source-agreements --accept-package-agreements --silent --disable-interactivity @scopeArg
+    if ($LASTEXITCODE -eq 0) {
         $script:Installed.Add("$Name ($Id)")
         Set-TaskStatus -Index $TaskIndex -Status "installed" -Details "Installed"
     }
-    catch {
+    else {
         $script:Failed.Add("$Name ($Id)")
-        Set-TaskStatus -Index $TaskIndex -Status "failed" -Details "Install failed"
-        Add-ManualStep "Install $Name manually: https://winget.run/pkg/$($Id.Replace('.', '/'))"
+        Set-TaskStatus -Index $TaskIndex -Status "failed" -Details "Install failed (exit code $LASTEXITCODE)"
+        Add-ManualStep "Install $Name manually: winget install --id $Id -e --scope user"
     }
     Render-Dashboard -CurrentStep "Install $Name"
 }
@@ -496,7 +498,8 @@ else {
 Render-Dashboard -CurrentStep "Preflight checks"
 
 foreach ($pkg in $packages) {
-    Install-WingetPackage -Name $pkg.name -Id $pkg.id -TaskIndex $packageTaskMap[$pkg.id]
+    $scope = if ($pkg.PSObject.Properties["scope"]) { $pkg.scope } else { "user" }
+    Install-WingetPackage -Name $pkg.name -Id $pkg.id -TaskIndex $packageTaskMap[$pkg.id] -Scope $scope
 }
 
 Ensure-WslNode -TaskIndex $wslNodeTask
