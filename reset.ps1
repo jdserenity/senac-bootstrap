@@ -11,7 +11,7 @@ if (-not $Force) {
     Write-Host "SENAC BOOTSTRAP RESET" -ForegroundColor Cyan
     Write-Host "This will uninstall everything bootstrap.ps1 installs:" -ForegroundColor Yellow
     Write-Host "  - All winget packages in config/packages.json"
-    Write-Host "  - WSL Ubuntu-24.04 distro (wsl --unregister) — this deletes all WSL data"
+    Write-Host "  - WSL Ubuntu-24.04 distro (wsl --unregister) - this deletes all WSL data"
     Write-Host "  - Neovim config at %LOCALAPPDATA%\nvim"
     Write-Host ""
     Write-Host "Run with -Force to proceed: ./reset.ps1 -Force" -ForegroundColor Yellow
@@ -25,7 +25,7 @@ function Test-CommandExists {
 
 $packageFile = Join-Path $PSScriptRoot "config/packages.json"
 if (-not (Test-Path $packageFile)) {
-    Write-Host "Could not find config/packages.json — skipping winget uninstalls." -ForegroundColor Yellow
+    Write-Host "Could not find config/packages.json - skipping winget uninstalls." -ForegroundColor Yellow
     $packages = @()
 }
 else {
@@ -43,7 +43,7 @@ if (Test-CommandExists -CommandName "wsl") {
     }
 }
 else {
-    Write-Host "WSL not found — skipping distro unregister." -ForegroundColor Yellow
+    Write-Host "WSL not found - skipping distro unregister." -ForegroundColor Yellow
 }
 
 Write-Host ""
@@ -56,7 +56,7 @@ if (Test-CommandExists -CommandName "winget") {
     }
 }
 else {
-    Write-Host "winget not found — skipping package uninstalls." -ForegroundColor Yellow
+    Write-Host "winget not found - skipping package uninstalls." -ForegroundColor Yellow
 }
 
 Write-Host ""
@@ -69,12 +69,12 @@ if (Test-Path $nvimPath) {
     Write-Host "Removed." -ForegroundColor Green
 }
 else {
-    Write-Host "No Neovim config found at $nvimPath — skipping." -ForegroundColor Yellow
+    Write-Host "No Neovim config found at $nvimPath - skipping." -ForegroundColor Yellow
 }
 
 Write-Host ""
 Write-Host "Reset complete." -ForegroundColor Green
 Write-Host "You can now re-run bootstrap.ps1 for a clean install." -ForegroundColor Green
 Write-Host ""
-Write-Host "Note: After WSL + Ubuntu reinstall, open Ubuntu once manually to initialize" -ForegroundColor Yellow
-Write-Host "the distro before running bootstrap.ps1 again." -ForegroundColor Yellow
+Write-Host "Note: After WSL + Ubuntu reinstall, open Ubuntu 24.04 from the Start Menu," -ForegroundColor Yellow
+Write-Host "complete first-time setup, then re-run bootstrap.ps1." -ForegroundColor Yellow
