@@ -7,11 +7,7 @@
     "name": "Neovim",
     "id": "Neovim.Neovim"
   },
-  {
-    "name": "Git",
-    "id": "Git.Git"
-  },
-  {
+{
     "name": "Claude Code CLI",
     "id": "Anthropic.ClaudeCode"
   },
