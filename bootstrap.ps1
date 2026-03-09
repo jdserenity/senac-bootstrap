@@ -200,11 +200,12 @@ function Open-InNewTerminalTab {
     param([string]$Cmd)
     if ([string]::IsNullOrWhiteSpace($Cmd)) { return }
     try {
+        $shell = if (Test-CommandExists "pwsh") { "pwsh" } else { "powershell" }
         if (Test-CommandExists "wt") {
-            Start-Process wt -ArgumentList "new-tab", "--", "pwsh", "-NoExit", "-Command", $Cmd
+            Start-Process wt -ArgumentList "new-tab", "--", $shell, "-NoExit", "-Command", $Cmd
         }
         else {
-            Start-Process powershell -ArgumentList "-NoExit", "-Command", $Cmd
+            Start-Process $shell -ArgumentList "-NoExit", "-Command", $Cmd
         }
     }
     catch {
@@ -556,6 +557,18 @@ $nvimTask = Add-Task -Title "Setup Neovim config"
 
 Render-Dashboard -CurrentStep "Starting bootstrap"
 
+Set-TaskStatus -Index $preflightTask -Status "running" -Details "Checking execution policy"
+Write-Log "Checking PowerShell execution policy..."
+Render-Dashboard -CurrentStep "Preflight checks"
+
+if (-not $DryRun) {
+    $ep = Get-ExecutionPolicy -Scope CurrentUser
+    if ($ep -eq "Undefined" -or $ep -eq "Restricted") {
+        Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
+        Write-Log "Set execution policy to RemoteSigned for current user."
+    }
+}
+
 Set-TaskStatus -Index $preflightTask -Status "running" -Details "Checking winget availability"
 Write-Log "Checking winget availability..."
 Render-Dashboard -CurrentStep "Preflight checks"
@@ -610,6 +623,19 @@ if (-not (Test-CommandExists "npm")) {
 foreach ($npkg in $npmPackages) {
     $openCmd = if ($npkg.PSObject.Properties["openCmd"]) { $npkg.openCmd } else { "" }
     Install-NpmPackageGlobal -Name $npkg.name -Package $npkg.package -Cmd $npkg.cmd -TaskIndex $npmPackageTaskMap[$npkg.package] -OpenCmd $openCmd
+}
+
+# Persist npm global bin to user PATH so new sessions find npm-installed CLIs without manual steps
+if (-not $DryRun -and (Test-CommandExists "npm")) {
+    $npmBin = (& npm prefix -g 2>$null).Trim()
+    if ($npmBin) {
+        $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+        if ($userPath -notlike "*$npmBin*") {
+            [Environment]::SetEnvironmentVariable("Path", "$userPath;$npmBin", "User")
+            $env:Path += ";$npmBin"
+            Write-Log "Added npm global bin to user PATH: $npmBin"
+        }
+    }
 }
 
 Apply-NvimConfigFromDotfiles -RepoUrl $DotfilesRepoUrl -SubPath $DotfilesSubPath -TaskIndex $nvimTask
