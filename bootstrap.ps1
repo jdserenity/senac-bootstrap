@@ -254,7 +254,7 @@ function Ensure-WslNode {
 
     if (-not (Test-CommandExists -CommandName "wsl")) {
         $script:Skipped.Add("Node.js in WSL")
-        Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "WSL not installed yet — re-run bootstrap after WSL setup"
+        Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "WSL not installed yet - re-run bootstrap after WSL setup"
         Add-ManualStep "WSL was just installed. Restart your PC if prompted, then open 'Ubuntu 24.04' from the Start Menu, complete the username/password setup, and re-run bootstrap.ps1."
         Render-Dashboard -CurrentStep "Setup Node.js in WSL"
         return
@@ -265,7 +265,7 @@ function Ensure-WslNode {
 
     if (-not (Test-WslReady)) {
         $script:Skipped.Add("Node.js in WSL")
-        Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "Ubuntu not initialized yet — re-run bootstrap after setup"
+        Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "Ubuntu not initialized yet - re-run bootstrap after setup"
         Add-ManualStep "Ubuntu 24.04 needs first-time setup: open 'Ubuntu 24.04' from the Start Menu, choose a username and password, then re-run bootstrap.ps1."
         Render-Dashboard -CurrentStep "Setup Node.js in WSL"
         return
@@ -327,14 +327,14 @@ function Install-WslNpmPackage {
 
     if (-not (Test-CommandExists -CommandName "wsl")) {
         $script:Skipped.Add("$Name ($Package)")
-        Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "WSL not available — re-run bootstrap after WSL setup"
+        Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "WSL not available - re-run bootstrap after WSL setup"
         Render-Dashboard -CurrentStep "Install $Name in WSL"
         return
     }
 
     if (-not (Test-WslReady)) {
         $script:Skipped.Add("$Name ($Package)")
-        Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "Ubuntu not initialized yet — re-run bootstrap after setup"
+        Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "Ubuntu not initialized yet - re-run bootstrap after setup"
         Render-Dashboard -CurrentStep "Install $Name in WSL"
         return
     }
@@ -507,9 +507,9 @@ foreach ($wpkg in $wslPackages) {
 
 Apply-NvimConfigFromDotfiles -RepoUrl $DotfilesRepoUrl -SubPath $DotfilesSubPath -TaskIndex $nvimTask
 
-Add-ManualStep "All winget installs run as your user (no admin needed). If one fails anyway, IT may have blocked that specific package — ask them to allow it."
-Add-ManualStep "WSL requires the VirtualMachinePlatform Windows Feature. If 'winget install Microsoft.WSL' fails, ask IT to enable it — it is a one-time unlock."
-Add-ManualStep "Claude Code, Codex CLI, and Gemini CLI require auth — after install, open Ubuntu and run 'claude', 'codex', or 'gemini' to sign in interactively."
+Add-ManualStep "All winget installs run as your user (no admin needed). If one fails anyway, IT may have blocked that specific package - ask them to allow it."
+Add-ManualStep "WSL requires the VirtualMachinePlatform Windows Feature. If 'winget install Microsoft.WSL' fails, ask IT to enable it - it is a one-time unlock."
+Add-ManualStep "Claude Code, Codex CLI, and Gemini CLI require auth - after install, open Ubuntu and run 'claude', 'codex', or 'gemini' to sign in interactively."
 if ($DryRun -and $Mac) {
     Add-ManualStep "Mac dry run mode ran. No system changes were made."
 }
