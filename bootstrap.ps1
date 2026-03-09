@@ -283,8 +283,7 @@ function Install-NpmPackageGlobal {
         return
     }
 
-    & $Cmd --version 2>$null | Out-Null
-    if ($LASTEXITCODE -eq 0) {
+    if (Test-CommandExists -CommandName $Cmd) {
         Write-Log "$Name already installed, skipping."
         $script:Skipped.Add("$Name ($Package)")
         Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "Already installed"
