@@ -16,6 +16,7 @@ $script:Skipped = New-Object System.Collections.Generic.List[string]
 $script:Failed = New-Object System.Collections.Generic.List[string]
 $script:Tasks = New-Object System.Collections.Generic.List[object]
 $script:DoneStates = @("installed", "skipped", "failed", "completed")
+$script:ActivityLog = New-Object System.Collections.Generic.List[string]
 
 if ($Mac -and (-not $DryRun)) {
     throw "Use -Mac only with -DryRun. Example: ./bootstrap.ps1 -DryRun -Mac"
@@ -24,6 +25,11 @@ if ($Mac -and (-not $DryRun)) {
 function Add-ManualStep {
     param([string]$Text)
     $script:ManualSteps.Add($Text)
+}
+
+function Write-Log {
+    param([string]$Msg)
+    $script:ActivityLog.Add($Msg)
 }
 
 function Test-CommandExists {
@@ -136,6 +142,15 @@ function Render-Dashboard {
         }
         Write-Host $line -ForegroundColor $color
     }
+
+    if ($script:ActivityLog.Count -gt 0) {
+        Write-Host ""
+        Write-Host "Activity:" -ForegroundColor DarkGray
+        $recentLogs = $script:ActivityLog | Select-Object -Last 5
+        foreach ($entry in $recentLogs) {
+            Write-Host "  $entry" -ForegroundColor DarkGray
+        }
+    }
 }
 
 function Write-FinalReport {
@@ -191,6 +206,7 @@ function Install-WingetPackage {
     )
 
     Set-TaskStatus -Index $TaskIndex -Status "running" -Details "Checking existing install"
+    Write-Log "Checking if $Name ($Id) is already installed..."
     Render-Dashboard -CurrentStep "Install $Name"
 
     if ($DryRun -and $Mac) {
@@ -201,6 +217,7 @@ function Install-WingetPackage {
     }
 
     if (Test-WingetPackageInstalled -PackageId $Id) {
+        Write-Log "$Name already installed, skipping."
         $script:Skipped.Add("$Name ($Id)")
         Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "Already installed"
         Render-Dashboard -CurrentStep "Install $Name"
@@ -214,14 +231,17 @@ function Install-WingetPackage {
         return
     }
 
+    Write-Log "Running: winget install --id $Id --scope $Scope"
     $scopeArg = if ($Scope) { @("--scope", $Scope) } else { @() }
     winget install --id $Id -e --accept-source-agreements --accept-package-agreements --silent --disable-interactivity @scopeArg
     if ($LASTEXITCODE -eq 0) {
+        Write-Log "$Name installed successfully."
         $script:Installed.Add("$Name ($Id)")
         Set-TaskStatus -Index $TaskIndex -Status "installed" -Details "Installed"
         Open-AppAfterInstall -Cmd $LaunchCmd
     }
     else {
+        Write-Log "$Name install failed (exit code $LASTEXITCODE)."
         $script:Failed.Add("$Name ($Id)")
         Set-TaskStatus -Index $TaskIndex -Status "failed" -Details "Install failed (exit code $LASTEXITCODE)"
         Add-ManualStep "Install $Name manually: winget install --id $Id -e --scope user"
@@ -238,6 +258,7 @@ function Install-NpmPackageGlobal {
     )
 
     Set-TaskStatus -Index $TaskIndex -Status "running" -Details "Checking install"
+    Write-Log "Checking if $Name ($Package) is already installed..."
     Render-Dashboard -CurrentStep "Install $Name"
 
     if ($DryRun -and $Mac) {
@@ -264,14 +285,17 @@ function Install-NpmPackageGlobal {
 
     & $Cmd --version 2>$null | Out-Null
     if ($LASTEXITCODE -eq 0) {
+        Write-Log "$Name already installed, skipping."
         $script:Skipped.Add("$Name ($Package)")
         Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "Already installed"
         Render-Dashboard -CurrentStep "Install $Name"
         return
     }
 
+    Write-Log "Running: npm install -g $Package"
     try {
         npm install -g $Package
+        Write-Log "$Name installed successfully."
         $script:Installed.Add("$Name ($Package)")
         Set-TaskStatus -Index $TaskIndex -Status "installed" -Details "Installed"
     }
@@ -287,6 +311,7 @@ function Install-NeovimPortable {
     param([int]$TaskIndex)
 
     Set-TaskStatus -Index $TaskIndex -Status "running" -Details "Checking existing install"
+    Write-Log "Checking for existing Neovim install..."
     Render-Dashboard -CurrentStep "Install Neovim"
 
     if ($DryRun -and $Mac) {
@@ -318,10 +343,12 @@ function Install-NeovimPortable {
 
     try {
         Set-TaskStatus -Index $TaskIndex -Status "running" -Details "Downloading nvim-win64.zip"
+        Write-Log "Downloading $zipUrl ..."
         Render-Dashboard -CurrentStep "Install Neovim"
         Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing
 
         Set-TaskStatus -Index $TaskIndex -Status "running" -Details "Extracting"
+        Write-Log "Extracting nvim-win64.zip to $installDir ..."
         Render-Dashboard -CurrentStep "Install Neovim"
         $extractTemp = Join-Path $env:TEMP "nvim-win64-extract"
         if (Test-Path $extractTemp) { Remove-Item $extractTemp -Recurse -Force }
@@ -341,6 +368,7 @@ function Install-NeovimPortable {
             $env:Path += ";$binDir"
         }
 
+        Write-Log "Neovim installed to $installDir and added to PATH."
         $script:Installed.Add("Neovim (portable, $installDir)")
         Set-TaskStatus -Index $TaskIndex -Status "installed" -Details "Installed to $installDir"
 
@@ -384,6 +412,7 @@ function Apply-NvimConfigFromDotfiles {
     }
 
     Set-TaskStatus -Index $TaskIndex -Status "running" -Details "Preparing dotfiles sync"
+    Write-Log "Cloning dotfiles from $RepoUrl ..."
     Render-Dashboard -CurrentStep "Setup Neovim config"
 
     if ($DryRun) {
@@ -419,6 +448,7 @@ function Apply-NvimConfigFromDotfiles {
 
     try {
 
+        Write-Log "Running: git clone --depth 1 $RepoUrl"
         git clone --depth 1 $RepoUrl $tempRoot | Out-Null
 
         $source = $tempRoot
@@ -440,6 +470,7 @@ function Apply-NvimConfigFromDotfiles {
             Copy-Item -Path $item.FullName -Destination $target -Recurse -Force
         }
 
+        Write-Log "Neovim config copied to $target."
         $script:Installed.Add("Neovim config from jdserenity/nvim-lazyvim-config")
         Set-TaskStatus -Index $TaskIndex -Status "completed" -Details "Copied to $target"
         Add-ManualStep "Launch Neovim once (`nvim`) to let LazyVim install plugins."
@@ -485,6 +516,7 @@ $nvimTask = Add-Task -Title "Setup Neovim config"
 Render-Dashboard -CurrentStep "Starting bootstrap"
 
 Set-TaskStatus -Index $preflightTask -Status "running" -Details "Checking winget availability"
+Write-Log "Checking winget availability..."
 Render-Dashboard -CurrentStep "Preflight checks"
 
 if ($DryRun -and $Mac) {
@@ -499,6 +531,7 @@ else {
         exit 1
     }
 
+    Write-Log "winget is available."
     Set-TaskStatus -Index $preflightTask -Status "completed" -Details "winget is ready"
 }
 
@@ -513,6 +546,7 @@ foreach ($pkg in $packages) {
 Install-NeovimPortable -TaskIndex $nvimInstallTask
 
 # Refresh PATH so Node.js installed by winget is available in this session
+Write-Log "Refreshing PATH from registry..."
 $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 
 # Fallback: if npm still isn't in PATH (winget MSI may write PATH after its process exits),
