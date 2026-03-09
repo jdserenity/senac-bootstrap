@@ -515,6 +515,22 @@ Install-NeovimPortable -TaskIndex $nvimInstallTask
 # Refresh PATH so Node.js installed by winget is available in this session
 $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 
+# Fallback: if npm still isn't in PATH (winget MSI may write PATH after its process exits),
+# probe common Node.js install locations and add the first one found.
+if (-not (Test-CommandExists "npm")) {
+    $nodeProbePaths = @(
+        "$env:LOCALAPPDATA\Programs\nodejs",
+        "$env:ProgramFiles\nodejs",
+        "${env:ProgramFiles(x86)}\nodejs"
+    )
+    foreach ($p in $nodeProbePaths) {
+        if (Test-Path (Join-Path $p "npm.cmd")) {
+            $env:Path += ";$p"
+            break
+        }
+    }
+}
+
 foreach ($npkg in $npmPackages) {
     Install-NpmPackageGlobal -Name $npkg.name -Package $npkg.package -Cmd $npkg.cmd -TaskIndex $npmPackageTaskMap[$npkg.package]
 }

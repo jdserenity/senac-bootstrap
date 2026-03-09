@@ -11,6 +11,7 @@ if (-not $Force) {
     Write-Host "SENAC BOOTSTRAP RESET" -ForegroundColor Cyan
     Write-Host "This will uninstall everything bootstrap.ps1 installs:" -ForegroundColor Yellow
     Write-Host "  - All winget packages in config/packages.json"
+    Write-Host "  - All npm global packages in config/npm-packages.json (Claude Code, Codex, Gemini)"
     Write-Host "  - WSL Ubuntu-24.04 distro (wsl --unregister) - this deletes all WSL data"
     Write-Host "  - Neovim config at %LOCALAPPDATA%\nvim"
     Write-Host ""
@@ -57,6 +58,30 @@ if (Test-CommandExists -CommandName "winget") {
 }
 else {
     Write-Host "winget not found - skipping package uninstalls." -ForegroundColor Yellow
+}
+
+Write-Host ""
+Write-Host "=== Uninstalling npm global packages ===" -ForegroundColor Cyan
+
+$npmPackageFile = Join-Path $PSScriptRoot "config/npm-packages.json"
+if (-not (Test-Path $npmPackageFile)) {
+    Write-Host "Could not find config/npm-packages.json - skipping npm uninstalls." -ForegroundColor Yellow
+    $npmPackages = @()
+}
+else {
+    $npmPackages = Get-Content -Raw -Path $npmPackageFile | ConvertFrom-Json
+}
+
+if (Test-CommandExists -CommandName "npm") {
+    foreach ($npkg in $npmPackages) {
+        Write-Host "Stopping $($npkg.cmd) process if running..." -ForegroundColor DarkCyan
+        Stop-Process -Name $npkg.cmd -Force -ErrorAction SilentlyContinue
+        Write-Host "Uninstalling $($npkg.name) ($($npkg.package))..." -ForegroundColor DarkCyan
+        npm uninstall -g $npkg.package 2>$null
+    }
+}
+else {
+    Write-Host "npm not found - skipping npm package uninstalls." -ForegroundColor Yellow
 }
 
 Write-Host ""
