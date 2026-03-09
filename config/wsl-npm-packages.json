@@ -1,0 +1,17 @@
+[
+  {
+    "name": "Claude Code CLI",
+    "package": "@anthropic-ai/claude-code",
+    "cmd": "claude"
+  },
+  {
+    "name": "Codex CLI",
+    "package": "@openai/codex",
+    "cmd": "codex"
+  },
+  {
+    "name": "Gemini CLI",
+    "package": "@google/gemini-cli",
+    "cmd": "gemini"
+  }
+]

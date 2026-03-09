@@ -214,6 +214,152 @@ function Install-WingetPackage {
     Render-Dashboard -CurrentStep "Install $Name"
 }
 
+# Returns $true if WSL is installed and the default Ubuntu distro is initialized.
+# An uninitialized distro hangs waiting for first-run setup, so we probe with
+# a non-interactive command and a short timeout via Start-Job.
+function Test-WslReady {
+    $job = Start-Job -ScriptBlock {
+        wsl -- bash -c "echo ready" 2>&1
+    }
+    $completed = Wait-Job $job -Timeout 8
+    if ($null -eq $completed) {
+        Stop-Job $job
+        Remove-Job $job -Force
+        return $false
+    }
+    $out = Receive-Job $job
+    Remove-Job $job -Force
+    return ($out -match "ready")
+}
+
+function Ensure-WslNode {
+    param([int]$TaskIndex)
+
+    Set-TaskStatus -Index $TaskIndex -Status "running" -Details "Checking WSL"
+    Render-Dashboard -CurrentStep "Setup Node.js in WSL"
+
+    if ($DryRun -and $Mac) {
+        $script:Skipped.Add("Node.js in WSL [dry-run]")
+        Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "Dry run (mac): would install nvm + node in WSL"
+        Render-Dashboard -CurrentStep "Setup Node.js in WSL"
+        return
+    }
+
+    if ($DryRun) {
+        $script:Skipped.Add("Node.js in WSL [dry-run]")
+        Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "Dry run: would install nvm + node LTS via nvm"
+        Render-Dashboard -CurrentStep "Setup Node.js in WSL"
+        return
+    }
+
+    if (-not (Test-CommandExists -CommandName "wsl")) {
+        $script:Skipped.Add("Node.js in WSL")
+        Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "WSL not installed yet — re-run bootstrap after WSL setup"
+        Add-ManualStep "WSL was just installed. Restart your PC if prompted, then open 'Ubuntu 24.04' from the Start Menu, complete the username/password setup, and re-run bootstrap.ps1."
+        Render-Dashboard -CurrentStep "Setup Node.js in WSL"
+        return
+    }
+
+    Set-TaskStatus -Index $TaskIndex -Status "running" -Details "Checking if Ubuntu is initialized"
+    Render-Dashboard -CurrentStep "Setup Node.js in WSL"
+
+    if (-not (Test-WslReady)) {
+        $script:Skipped.Add("Node.js in WSL")
+        Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "Ubuntu not initialized yet — re-run bootstrap after setup"
+        Add-ManualStep "Ubuntu 24.04 needs first-time setup: open 'Ubuntu 24.04' from the Start Menu, choose a username and password, then re-run bootstrap.ps1."
+        Render-Dashboard -CurrentStep "Setup Node.js in WSL"
+        return
+    }
+
+    $nodeCheck = wsl -- bash -lc "node --version" 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        $script:Skipped.Add("Node.js in WSL ($nodeCheck)")
+        Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "Already installed ($nodeCheck)"
+        Render-Dashboard -CurrentStep "Setup Node.js in WSL"
+        return
+    }
+
+    try {
+        Set-TaskStatus -Index $TaskIndex -Status "running" -Details "Installing nvm"
+        Render-Dashboard -CurrentStep "Setup Node.js in WSL"
+        wsl -- bash -c "curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash"
+
+        Set-TaskStatus -Index $TaskIndex -Status "running" -Details "Installing Node.js LTS"
+        Render-Dashboard -CurrentStep "Setup Node.js in WSL"
+        wsl -- bash -lc "nvm install --lts"
+
+        $version = wsl -- bash -lc "node --version" 2>$null
+        $script:Installed.Add("Node.js in WSL ($version)")
+        Set-TaskStatus -Index $TaskIndex -Status "installed" -Details "Installed ($version)"
+    }
+    catch {
+        $script:Failed.Add("Node.js in WSL")
+        Set-TaskStatus -Index $TaskIndex -Status "failed" -Details "Install failed"
+        Add-ManualStep "Install Node.js manually in WSL: open Ubuntu and run 'nvm install --lts' (install nvm first if needed)"
+    }
+    Render-Dashboard -CurrentStep "Setup Node.js in WSL"
+}
+
+function Install-WslNpmPackage {
+    param(
+        [string]$Name,
+        [string]$Package,
+        [string]$Cmd,
+        [int]$TaskIndex
+    )
+
+    Set-TaskStatus -Index $TaskIndex -Status "running" -Details "Checking WSL install"
+    Render-Dashboard -CurrentStep "Install $Name in WSL"
+
+    if ($DryRun -and $Mac) {
+        $script:Skipped.Add("$Name ($Package) [dry-run]")
+        Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "Dry run (mac): would npm install -g $Package in WSL"
+        Render-Dashboard -CurrentStep "Install $Name in WSL"
+        return
+    }
+
+    if ($DryRun) {
+        $script:Skipped.Add("$Name ($Package) [dry-run]")
+        Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "Dry run: would npm install -g $Package in WSL"
+        Render-Dashboard -CurrentStep "Install $Name in WSL"
+        return
+    }
+
+    if (-not (Test-CommandExists -CommandName "wsl")) {
+        $script:Skipped.Add("$Name ($Package)")
+        Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "WSL not available — re-run bootstrap after WSL setup"
+        Render-Dashboard -CurrentStep "Install $Name in WSL"
+        return
+    }
+
+    if (-not (Test-WslReady)) {
+        $script:Skipped.Add("$Name ($Package)")
+        Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "Ubuntu not initialized yet — re-run bootstrap after setup"
+        Render-Dashboard -CurrentStep "Install $Name in WSL"
+        return
+    }
+
+    $checkCmd = wsl -- bash -lc "$Cmd --version" 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        $script:Skipped.Add("$Name ($Package)")
+        Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "Already installed"
+        Render-Dashboard -CurrentStep "Install $Name in WSL"
+        return
+    }
+
+    try {
+        wsl -- bash -lc "npm install -g $Package"
+        $script:Installed.Add("$Name ($Package) in WSL")
+        Set-TaskStatus -Index $TaskIndex -Status "installed" -Details "Installed in WSL"
+    }
+    catch {
+        $script:Failed.Add("$Name ($Package)")
+        Set-TaskStatus -Index $TaskIndex -Status "failed" -Details "Install failed"
+        Add-ManualStep "Install $Name manually in WSL: open Ubuntu and run 'npm install -g $Package'"
+    }
+    Render-Dashboard -CurrentStep "Install $Name in WSL"
+}
+
 function Apply-NvimConfigFromDotfiles {
     param(
         [string]$RepoUrl,
@@ -307,12 +453,23 @@ if (-not (Test-Path $packageFile)) {
     throw "Missing package config: $packageFile"
 }
 
+$wslPackageFile = Join-Path $PSScriptRoot "config/wsl-npm-packages.json"
+if (-not (Test-Path $wslPackageFile)) {
+    throw "Missing WSL package config: $wslPackageFile"
+}
+
 $packages = Get-Content -Raw -Path $packageFile | ConvertFrom-Json
+$wslPackages = Get-Content -Raw -Path $wslPackageFile | ConvertFrom-Json
 
 $preflightTask = Add-Task -Title "Preflight checks"
 $packageTaskMap = @{}
 foreach ($pkg in $packages) {
     $packageTaskMap[$pkg.id] = Add-Task -Title ("Install {0}" -f $pkg.name)
+}
+$wslNodeTask = Add-Task -Title "Setup Node.js in WSL"
+$wslPackageTaskMap = @{}
+foreach ($wpkg in $wslPackages) {
+    $wslPackageTaskMap[$wpkg.package] = Add-Task -Title ("Install {0} in WSL" -f $wpkg.name)
 }
 $nvimTask = Add-Task -Title "Setup Neovim config"
 
@@ -342,11 +499,17 @@ foreach ($pkg in $packages) {
     Install-WingetPackage -Name $pkg.name -Id $pkg.id -TaskIndex $packageTaskMap[$pkg.id]
 }
 
+Ensure-WslNode -TaskIndex $wslNodeTask
+
+foreach ($wpkg in $wslPackages) {
+    Install-WslNpmPackage -Name $wpkg.name -Package $wpkg.package -Cmd $wpkg.cmd -TaskIndex $wslPackageTaskMap[$wpkg.package]
+}
+
 Apply-NvimConfigFromDotfiles -RepoUrl $DotfilesRepoUrl -SubPath $DotfilesSubPath -TaskIndex $nvimTask
 
-Add-ManualStep "Sign in to Arc and/or Chrome manually (account sync, MFA, and policies cannot be safely automated)."
-Add-ManualStep "If school policy blocks installs, rerun from an elevated PowerShell or contact IT."
-Add-ManualStep "If Codex CLI or Claude Code CLI asks for login, complete auth interactively after install."
+Add-ManualStep "All winget installs run as your user (no admin needed). If one fails anyway, IT may have blocked that specific package — ask them to allow it."
+Add-ManualStep "WSL requires the VirtualMachinePlatform Windows Feature. If 'winget install Microsoft.WSL' fails, ask IT to enable it — it is a one-time unlock."
+Add-ManualStep "Claude Code, Codex CLI, and Gemini CLI require auth — after install, open Ubuntu and run 'claude', 'codex', or 'gemini' to sign in interactively."
 if ($DryRun -and $Mac) {
     Add-ManualStep "Mac dry run mode ran. No system changes were made."
 }

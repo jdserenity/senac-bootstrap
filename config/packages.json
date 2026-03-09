@@ -1,18 +1,18 @@
 [
   {
-    "name": "Arc Browser",
-    "id": "TheBrowserCompany.Arc"
+    "name": "Vivaldi",
+    "id": "Vivaldi.Vivaldi"
   },
   {
     "name": "Neovim",
     "id": "Neovim.Neovim"
   },
-{
-    "name": "Claude Code CLI",
-    "id": "Anthropic.ClaudeCode"
+  {
+    "name": "WSL",
+    "id": "Microsoft.WSL"
   },
   {
-    "name": "Codex CLI",
-    "id": "OpenAI.Codex"
+    "name": "Ubuntu 24.04",
+    "id": "Canonical.Ubuntu.2404"
   }
 ]
