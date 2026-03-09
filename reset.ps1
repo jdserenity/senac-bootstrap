@@ -60,16 +60,34 @@ else {
 }
 
 Write-Host ""
-Write-Host "=== Removing Neovim config ===" -ForegroundColor Cyan
+Write-Host "=== Removing Neovim ===" -ForegroundColor Cyan
 
-$nvimPath = Join-Path $env:LOCALAPPDATA "nvim"
-if (Test-Path $nvimPath) {
-    Write-Host "Removing $nvimPath..." -ForegroundColor DarkCyan
-    Remove-Item -Path $nvimPath -Recurse -Force
+$nvimConfig = Join-Path $env:LOCALAPPDATA "nvim"
+if (Test-Path $nvimConfig) {
+    Write-Host "Removing config at $nvimConfig..." -ForegroundColor DarkCyan
+    Remove-Item -Path $nvimConfig -Recurse -Force
     Write-Host "Removed." -ForegroundColor Green
 }
 else {
-    Write-Host "No Neovim config found at $nvimPath - skipping." -ForegroundColor Yellow
+    Write-Host "No Neovim config found at $nvimConfig - skipping." -ForegroundColor Yellow
+}
+
+$nvimInstall = Join-Path $env:LOCALAPPDATA "Programs\Neovim"
+if (Test-Path $nvimInstall) {
+    Write-Host "Removing portable install at $nvimInstall..." -ForegroundColor DarkCyan
+    Remove-Item -Path $nvimInstall -Recurse -Force
+    Write-Host "Removed." -ForegroundColor Green
+
+    $binDir = Join-Path $nvimInstall "bin"
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    if ($userPath -like "*$binDir*") {
+        $newPath = ($userPath -split ";" | Where-Object { $_ -ne $binDir }) -join ";"
+        [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
+        Write-Host "Removed $binDir from user PATH." -ForegroundColor Green
+    }
+}
+else {
+    Write-Host "No portable Neovim found at $nvimInstall - skipping." -ForegroundColor Yellow
 }
 
 Write-Host ""

@@ -409,6 +409,7 @@ function Install-NeovimPortable {
         # The zip contains a single top-level folder (e.g. nvim-win64); move its contents to installDir
         $inner = Get-ChildItem $extractTemp | Select-Object -First 1
         if (Test-Path $installDir) { Remove-Item $installDir -Recurse -Force }
+        $null = New-Item -ItemType Directory -Force -Path (Split-Path $installDir -Parent)
         Move-Item $inner.FullName $installDir
 
         # Add bin dir to user PATH if not already present
