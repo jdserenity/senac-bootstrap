@@ -497,6 +497,86 @@ function Set-TaskbarPins {
     Render-Dashboard -CurrentStep "Pin taskbar items"
 }
 
+function Install-NerdFont {
+    param([int]$TaskIndex)
+
+    Set-TaskStatus -Index $TaskIndex -Status "running" -Details "Checking NerdFont install"
+    Write-Log "Checking for JetBrains Mono Nerd Font..."
+    Render-Dashboard -CurrentStep "Install NerdFont"
+
+    if ($DryRun -and $Mac) {
+        $script:Skipped.Add("JetBrains Mono Nerd Font [dry-run]")
+        Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "Dry run (mac): install manually"
+        Add-ManualStep "Mac: Install NerdFont for LazyVim: brew install --cask font-jetbrains-mono-nerd-font  Then set your terminal font to 'JetBrainsMono Nerd Font Mono' (iTerm2: Preferences > Profiles > Text > Font; Kitty/WezTerm: set font_family in config)."
+        Render-Dashboard -CurrentStep "Install NerdFont"
+        return
+    }
+
+    $fontDir = Join-Path $env:LOCALAPPDATA "Microsoft\Windows\Fonts"
+    $sampleFont = Join-Path $fontDir "JetBrainsMonoNerdFont-Regular.ttf"
+
+    if (Test-Path $sampleFont) {
+        $script:Skipped.Add("JetBrains Mono Nerd Font (already installed)")
+        Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "Already installed"
+        Render-Dashboard -CurrentStep "Install NerdFont"
+        return
+    }
+
+    if ($DryRun) {
+        $script:Skipped.Add("JetBrains Mono Nerd Font [dry-run]")
+        Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "Dry run: would download and install per-user"
+        Render-Dashboard -CurrentStep "Install NerdFont"
+        return
+    }
+
+    $zipUrl     = "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.zip"
+    $zipPath    = Join-Path $env:TEMP "JetBrainsMono-NerdFont.zip"
+    $extractPath = Join-Path $env:TEMP "JetBrainsMono-NerdFont-extract"
+
+    try {
+        Set-TaskStatus -Index $TaskIndex -Status "running" -Details "Downloading JetBrains Mono Nerd Font"
+        Write-Log "Downloading $zipUrl ..."
+        Render-Dashboard -CurrentStep "Install NerdFont"
+        Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing
+
+        Set-TaskStatus -Index $TaskIndex -Status "running" -Details "Extracting and installing fonts"
+        Write-Log "Extracting fonts to $fontDir ..."
+        Render-Dashboard -CurrentStep "Install NerdFont"
+        if (Test-Path $extractPath) { Remove-Item $extractPath -Recurse -Force }
+        Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
+
+        if (-not (Test-Path $fontDir)) {
+            New-Item -ItemType Directory -Path $fontDir -Force | Out-Null
+        }
+
+        $regPath = "HKCU:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
+        $ttfFiles = Get-ChildItem -Path $extractPath -Filter "*.ttf" -Recurse
+        $count = 0
+        foreach ($ttf in $ttfFiles) {
+            $dest = Join-Path $fontDir $ttf.Name
+            Copy-Item -Path $ttf.FullName -Destination $dest -Force
+            $regName = [System.IO.Path]::GetFileNameWithoutExtension($ttf.Name) + " (TrueType)"
+            Set-ItemProperty -Path $regPath -Name $regName -Value $ttf.Name -Force
+            $count++
+        }
+
+        Write-Log "Installed $count NerdFont files to $fontDir."
+        $script:Installed.Add("JetBrains Mono Nerd Font ($count files, per-user)")
+        Set-TaskStatus -Index $TaskIndex -Status "installed" -Details "$count font files installed"
+        Add-ManualStep "NerdFont installed. Set your terminal font to 'JetBrainsMono Nerd Font Mono' (Windows Terminal: Settings > Profiles > Appearance > Font face)."
+    }
+    catch {
+        $script:Failed.Add("JetBrains Mono Nerd Font")
+        Set-TaskStatus -Index $TaskIndex -Status "failed" -Details "Install failed: $($_.Exception.Message)"
+        Add-ManualStep "NerdFont install failed. Download JetBrainsMono.zip from https://github.com/ryanoasis/nerd-fonts/releases/latest, extract, and right-click each .ttf to install (choose 'Install' for per-user, no admin needed)."
+    }
+    finally {
+        if (Test-Path $zipPath)     { Remove-Item $zipPath -Force -ErrorAction SilentlyContinue }
+        if (Test-Path $extractPath) { Remove-Item $extractPath -Recurse -Force -ErrorAction SilentlyContinue }
+    }
+    Render-Dashboard -CurrentStep "Install NerdFont"
+}
+
 function Apply-NvimConfigFromDotfiles {
     param(
         [string]$RepoUrl,
@@ -611,6 +691,7 @@ foreach ($npkg in $npmPackages) {
     $npmPackageTaskMap[$npkg.package] = Add-Task -Title ("Install {0}" -f $npkg.name)
 }
 $nvimInstallTask = Add-Task -Title "Install Neovim"
+$nerdFontTask = Add-Task -Title "Install JetBrains Mono Nerd Font"
 $nvimTask = Add-Task -Title "Setup Neovim config"
 $taskbarPinTask = Add-Task -Title "Pin taskbar items: Vivaldi, Windows Terminal"
 
@@ -658,6 +739,8 @@ foreach ($pkg in $packages) {
 }
 
 Install-NeovimPortable -TaskIndex $nvimInstallTask
+
+Install-NerdFont -TaskIndex $nerdFontTask
 
 # Refresh PATH so Node.js installed by winget is available in this session
 Write-Log "Refreshing PATH from registry..."
