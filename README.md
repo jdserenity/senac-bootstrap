@@ -19,6 +19,7 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
 |---|---|
 | Vivaldi | `Vivaldi.Vivaldi` |
 | Node.js LTS | `OpenJS.NodeJS.LTS` |
+| VS Code | `Microsoft.VisualStudioCode` |
 
 **Neovim** — downloaded as a portable zip from GitHub releases, extracted to `%LOCALAPPDATA%\Programs\Neovim`, and added to your user PATH.
 

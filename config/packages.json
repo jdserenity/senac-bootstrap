@@ -9,5 +9,11 @@
     "id": "OpenJS.NodeJS.LTS",
     "scope": "user",
     "checkCmd": "node"
+  },
+  {
+    "name": "VS Code",
+    "id": "Microsoft.VisualStudioCode",
+    "scope": "user",
+    "checkCmd": "code"
   }
 ]
