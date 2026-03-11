@@ -549,6 +549,22 @@ function Install-NerdFont {
             New-Item -ItemType Directory -Path $fontDir -Force | Out-Null
         }
 
+        # Load Win32 font API for immediate activation (no logoff required)
+        if (-not ([System.Management.Automation.PSTypeName]'FontInstaller').Type) {
+            Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public class FontInstaller {
+    [DllImport("gdi32.dll", CharSet = CharSet.Auto)]
+    public static extern int AddFontResource(string lpFileName);
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    public static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+    public static readonly IntPtr HWND_BROADCAST = new IntPtr(0xffff);
+    public const uint WM_FONTCHANGE = 0x001D;
+}
+'@
+        }
+
         $regPath = "HKCU:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
         $ttfFiles = Get-ChildItem -Path $extractPath -Filter "*.ttf" -Recurse
         $count = 0
@@ -557,8 +573,10 @@ function Install-NerdFont {
             Copy-Item -Path $ttf.FullName -Destination $dest -Force
             $regName = [System.IO.Path]::GetFileNameWithoutExtension($ttf.Name) + " (TrueType)"
             Set-ItemProperty -Path $regPath -Name $regName -Value $ttf.Name -Force
+            [void][FontInstaller]::AddFontResource($dest)
             $count++
         }
+        [void][FontInstaller]::SendMessage([FontInstaller]::HWND_BROADCAST, [FontInstaller]::WM_FONTCHANGE, [IntPtr]::Zero, [IntPtr]::Zero)
 
         Write-Log "Installed $count NerdFont files to $fontDir."
         $script:Installed.Add("JetBrains Mono Nerd Font ($count files, per-user)")

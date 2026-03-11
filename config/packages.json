@@ -14,6 +14,13 @@
     "name": "VS Code",
     "id": "Microsoft.VisualStudioCode",
     "scope": "user",
-    "checkCmd": "code"
+    "checkCmd": "code",
+    "launchCmd": "code"
+  },
+  {
+    "name": "WinLibs C Compiler (GCC/POSIX/UCRT)",
+    "id": "BrechtSanders.WinLibs.POSIX.UCRT",
+    "scope": "user",
+    "checkCmd": "gcc"
   }
 ]
