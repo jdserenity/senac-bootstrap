@@ -236,10 +236,10 @@ function Install-WingetPackage {
     }
 
     # Check if the command is already on PATH (catches non-winget installs e.g. pre-imaged machines)
+    $needsUpgrade = $false
     if (-not [string]::IsNullOrWhiteSpace($CheckCmd) -and (Test-CommandExists -CommandName $CheckCmd)) {
         # If a minimum version is required, verify the installed version is new enough
         if (-not [string]::IsNullOrWhiteSpace($MinVersion)) {
-            $needsUpgrade = $false
             try {
                 $verOutput = (& $CheckCmd --version 2>$null).Trim()
                 $verMatch  = [regex]::Match($verOutput, '\d+\.\d+\.\d+')
@@ -273,7 +273,8 @@ function Install-WingetPackage {
         }
     }
 
-    if (-not (Test-CommandExists -CommandName $CheckCmd) -and (Test-WingetPackageInstalled -PackageId $Id)) {
+    # Skip if winget already has it installed and we don't need to upgrade
+    if (-not $needsUpgrade -and (Test-WingetPackageInstalled -PackageId $Id)) {
         Write-Log "$Name already installed, skipping."
         $script:Skipped.Add("$Name ($Id)")
         Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "Already installed"
