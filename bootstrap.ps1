@@ -220,7 +220,8 @@ function Install-WingetPackage {
         [int]$TaskIndex,
         [string]$Scope = "user",
         [string]$LaunchCmd = "",
-        [string]$CheckCmd = ""
+        [string]$CheckCmd = "",
+        [string]$MinVersion = ""
     )
 
     Set-TaskStatus -Index $TaskIndex -Status "running" -Details "Checking existing install"
@@ -234,16 +235,45 @@ function Install-WingetPackage {
         return
     }
 
-    # Skip if the command is already on PATH (catches non-winget installs e.g. pre-imaged machines)
+    # Check if the command is already on PATH (catches non-winget installs e.g. pre-imaged machines)
     if (-not [string]::IsNullOrWhiteSpace($CheckCmd) -and (Test-CommandExists -CommandName $CheckCmd)) {
-        Write-Log "$Name already on PATH ($CheckCmd), skipping."
-        $script:Skipped.Add("$Name ($Id)")
-        Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "Already on PATH"
-        Render-Dashboard -CurrentStep "Install $Name"
-        return
+        # If a minimum version is required, verify the installed version is new enough
+        if (-not [string]::IsNullOrWhiteSpace($MinVersion)) {
+            $needsUpgrade = $false
+            try {
+                $verOutput = (& $CheckCmd --version 2>$null).Trim()
+                $verMatch  = [regex]::Match($verOutput, '\d+\.\d+\.\d+')
+                if ($verMatch.Success) {
+                    $installedVer = [Version]$verMatch.Value
+                    $requiredVer  = [Version]$MinVersion
+                    if ($installedVer -lt $requiredVer) {
+                        Write-Log "$Name version $installedVer is below minimum $requiredVer — upgrading."
+                        $needsUpgrade = $true
+                    }
+                }
+            }
+            catch {
+                # Can't determine version; assume it's fine
+            }
+
+            if (-not $needsUpgrade) {
+                Write-Log "$Name already on PATH ($CheckCmd) and meets minimum version, skipping."
+                $script:Skipped.Add("$Name ($Id)")
+                Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "Already on PATH"
+                Render-Dashboard -CurrentStep "Install $Name"
+                return
+            }
+        }
+        else {
+            Write-Log "$Name already on PATH ($CheckCmd), skipping."
+            $script:Skipped.Add("$Name ($Id)")
+            Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "Already on PATH"
+            Render-Dashboard -CurrentStep "Install $Name"
+            return
+        }
     }
 
-    if (Test-WingetPackageInstalled -PackageId $Id) {
+    if (-not (Test-CommandExists -CommandName $CheckCmd) -and (Test-WingetPackageInstalled -PackageId $Id)) {
         Write-Log "$Name already installed, skipping."
         $script:Skipped.Add("$Name ($Id)")
         Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "Already installed"
@@ -253,16 +283,18 @@ function Install-WingetPackage {
 
     if ($DryRun) {
         $script:Skipped.Add("$Name ($Id) [dry-run]")
-        Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "Dry run: would install"
+        Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "Dry run: would install/upgrade"
         Render-Dashboard -CurrentStep "Install $Name"
         return
     }
 
-    Write-Log "Running: winget install --id $Id --scope $Scope"
+    Write-Log "Running: winget upgrade/install --id $Id --scope $Scope"
     $scopeArg = if ($Scope) { @("--scope", $Scope) } else { @() }
-    winget install --id $Id -e --accept-source-agreements --accept-package-agreements --silent --disable-interactivity @scopeArg
+    # Use 'upgrade' when the package is already present but outdated; 'install' otherwise.
+    $wingetAction = if (Test-WingetPackageInstalled -PackageId $Id) { "upgrade" } else { "install" }
+    winget $wingetAction --id $Id -e --accept-source-agreements --accept-package-agreements --silent --disable-interactivity @scopeArg
     if ($LASTEXITCODE -eq 0) {
-        Write-Log "$Name installed successfully."
+        Write-Log "$Name installed/upgraded successfully."
         $script:Installed.Add("$Name ($Id)")
         Set-TaskStatus -Index $TaskIndex -Status "installed" -Details "Installed"
         Open-AppAfterInstall -Cmd $LaunchCmd
@@ -829,10 +861,11 @@ else {
 Render-Dashboard -CurrentStep "Preflight checks"
 
 foreach ($pkg in $packages) {
-    $scope     = if ($pkg.PSObject.Properties["scope"])     { $pkg.scope }     else { "user" }
-    $launchCmd = if ($pkg.PSObject.Properties["launchCmd"]) { $pkg.launchCmd } else { "" }
-    $checkCmd  = if ($pkg.PSObject.Properties["checkCmd"])  { $pkg.checkCmd }  else { "" }
-    Install-WingetPackage -Name $pkg.name -Id $pkg.id -TaskIndex $packageTaskMap[$pkg.id] -Scope $scope -LaunchCmd $launchCmd -CheckCmd $checkCmd
+    $scope      = if ($pkg.PSObject.Properties["scope"])      { $pkg.scope }      else { "user" }
+    $launchCmd  = if ($pkg.PSObject.Properties["launchCmd"])  { $pkg.launchCmd }  else { "" }
+    $checkCmd   = if ($pkg.PSObject.Properties["checkCmd"])   { $pkg.checkCmd }   else { "" }
+    $minVersion = if ($pkg.PSObject.Properties["minVersion"]) { $pkg.minVersion } else { "" }
+    Install-WingetPackage -Name $pkg.name -Id $pkg.id -TaskIndex $packageTaskMap[$pkg.id] -Scope $scope -LaunchCmd $launchCmd -CheckCmd $checkCmd -MinVersion $minVersion
 }
 
 Install-NeovimPortable -TaskIndex $nvimInstallTask
