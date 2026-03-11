@@ -289,11 +289,19 @@ function Install-WingetPackage {
         return
     }
 
-    Write-Log "Running: winget upgrade/install --id $Id --scope $Scope"
-    $scopeArg = if ($Scope) { @("--scope", $Scope) } else { @() }
-    # Use 'upgrade' when the package is already present but outdated; 'install' otherwise.
-    $wingetAction = if (Test-WingetPackageInstalled -PackageId $Id) { "upgrade" } else { "install" }
-    winget $wingetAction --id $Id -e --accept-source-agreements --accept-package-agreements --silent --disable-interactivity @scopeArg
+    # When upgrading an outdated package, use 'install --force' without --scope so winget
+    # matches the existing installation's scope (avoids exit code 0x8A150013 when the
+    # original install was system-wide but we'd otherwise pass --scope user).
+    if ($needsUpgrade) {
+        Write-Log "Running: winget install --force --id $Id"
+        winget install --id $Id -e --accept-source-agreements --accept-package-agreements --silent --disable-interactivity --force
+    }
+    else {
+        $scopeArg = if ($Scope) { @("--scope", $Scope) } else { @() }
+        $wingetAction = if (Test-WingetPackageInstalled -PackageId $Id) { "upgrade" } else { "install" }
+        Write-Log "Running: winget $wingetAction --id $Id --scope $Scope"
+        winget $wingetAction --id $Id -e --accept-source-agreements --accept-package-agreements --silent --disable-interactivity @scopeArg
+    }
     if ($LASTEXITCODE -eq 0) {
         Write-Log "$Name installed/upgraded successfully."
         $script:Installed.Add("$Name ($Id)")
