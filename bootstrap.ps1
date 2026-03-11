@@ -482,12 +482,38 @@ function Install-NeovimPortable {
 
 function Add-NodePortableToPath {
     param([string]$InstallDir)
-    # Prepend to user PATH (wins over any user-scope nodejs already there)
+
+    # 1. Prepend to user PATH registry entry (persists to future sessions via user PATH)
     $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
     $parts = ($userPath -split ";" | Where-Object { $_ -ne $InstallDir -and $_ -ne "" })
     [Environment]::SetEnvironmentVariable("Path", ("$InstallDir;" + ($parts -join ";")), "User")
-    # Prepend in current session immediately
+
+    # 2. Prepend in the current session immediately
     $env:Path = "$InstallDir;" + (($env:Path -split ";" | Where-Object { $_ -ne $InstallDir -and $_ -ne "" }) -join ";")
+
+    # 3. Write a prepend line to the PowerShell profile so future sessions override any
+    #    system-wide Node.js that appears earlier in machine PATH.
+    $profilePaths = @(
+        $PROFILE,
+        (Join-Path $env:USERPROFILE "Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1"),
+        (Join-Path $env:USERPROFILE "Documents\PowerShell\Microsoft.PowerShell_profile.ps1")
+    ) | Select-Object -Unique
+
+    $profileLine = "`$env:Path = `"$InstallDir;`$env:Path`""
+    foreach ($prof in $profilePaths) {
+        try {
+            $profDir = Split-Path $prof -Parent
+            if (-not (Test-Path $profDir)) {
+                New-Item -ItemType Directory -Path $profDir -Force | Out-Null
+            }
+            $existing = if (Test-Path $prof) { Get-Content $prof -Raw } else { "" }
+            if ($existing -notlike "*nodejs-portable*") {
+                $entry = "`r`n# Node.js portable - prepend so it overrides any system-wide Node.js`r`n$profileLine`r`n"
+                Add-Content -Path $prof -Value $entry -NoNewline
+            }
+        }
+        catch { }
+    }
 }
 
 function Install-NodePortable {
