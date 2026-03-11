@@ -15,12 +15,14 @@
     "id": "Microsoft.VisualStudioCode",
     "scope": "user",
     "checkCmd": "code",
-    "launchCmd": "code"
+    "launchCmd": "code",
+    "pathProbes": ["%LOCALAPPDATA%\\Programs\\Microsoft VS Code\\bin"]
   },
   {
     "name": "WinLibs C Compiler (GCC/POSIX/UCRT)",
     "id": "BrechtSanders.WinLibs.POSIX.UCRT",
     "scope": "user",
-    "checkCmd": "gcc"
+    "checkCmd": "gcc",
+    "pathProbes": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\BrechtSanders.WinLibs.POSIX.UCRT_*\\mingw64\\bin"]
   }
 ]

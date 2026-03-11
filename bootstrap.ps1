@@ -339,7 +339,7 @@ function Install-NpmPackageGlobal {
         Write-Log "$Name installed successfully."
         $script:Installed.Add("$Name ($Package)")
         Set-TaskStatus -Index $TaskIndex -Status "installed" -Details "Installed"
-        Open-InNewTerminalTab -Cmd $OpenCmd
+        # Open-InNewTerminalTab -Cmd $OpenCmd  # disabled: new-tab not working reliably
     }
     catch {
         $script:Failed.Add("$Name ($Package)")
@@ -414,18 +414,18 @@ function Install-NeovimPortable {
         $script:Installed.Add("Neovim (portable, $installDir)")
         Set-TaskStatus -Index $TaskIndex -Status "installed" -Details "Installed to $installDir"
 
-        # Open Neovim in a new terminal tab (Windows Terminal preferred, new window as fallback)
-        try {
-            if (Test-CommandExists "wt") {
-                Start-Process wt -ArgumentList "new-tab", "--", "pwsh", "-NoExit", "-Command", "`"& '$nvimExe'`""
-            }
-            else {
-                Start-Process powershell -ArgumentList "-NoExit", "-Command", "& '$nvimExe'"
-            }
-        }
-        catch {
-            # Silently ignore — install succeeded even if open fails.
-        }
+        # Disabled: opening nvim in a new terminal tab not working reliably
+        # try {
+        #     if (Test-CommandExists "wt") {
+        #         Start-Process wt -ArgumentList "new-tab", "--", "pwsh", "-NoExit", "-Command", "`"& '$nvimExe'`""
+        #     }
+        #     else {
+        #         Start-Process powershell -ArgumentList "-NoExit", "-Command", "& '$nvimExe'"
+        #     }
+        # }
+        # catch {
+        #     # Silently ignore — install succeeded even if open fails.
+        # }
     }
     catch {
         $script:Failed.Add("Neovim")
@@ -437,6 +437,84 @@ function Install-NeovimPortable {
         if (Test-Path $extractTemp) { Remove-Item $extractTemp -Recurse -Force -ErrorAction SilentlyContinue }
     }
     Render-Dashboard -CurrentStep "Install Neovim"
+}
+
+function Repair-PathEntries {
+    param([int]$TaskIndex)
+
+    Set-TaskStatus -Index $TaskIndex -Status "running" -Details "Checking PATH entries"
+    Write-Log "Checking PATH entries for installed tools..."
+    Render-Dashboard -CurrentStep "Repair PATH"
+
+    if ($DryRun) {
+        $script:Skipped.Add("PATH repair [dry-run]")
+        Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "Dry run: would check and repair PATH"
+        Render-Dashboard -CurrentStep "Repair PATH"
+        return
+    }
+
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    $added = New-Object System.Collections.Generic.List[string]
+
+    # Build probe list from packages that declare pathProbes
+    $probeTargets = @()
+    foreach ($pkg in $packages) {
+        if (-not $pkg.PSObject.Properties["checkCmd"])   { continue }
+        if (-not $pkg.PSObject.Properties["pathProbes"]) { continue }
+        $probeTargets += [PSCustomObject]@{
+            Name       = $pkg.name
+            CheckCmd   = $pkg.checkCmd
+            PathProbes = $pkg.pathProbes
+        }
+    }
+
+    # Neovim is not in packages.json so add it directly
+    $probeTargets += [PSCustomObject]@{
+        Name       = "Neovim"
+        CheckCmd   = "nvim"
+        PathProbes = @("%LOCALAPPDATA%\Programs\Neovim\bin")
+    }
+
+    foreach ($target in $probeTargets) {
+        if (Test-CommandExists -CommandName $target.CheckCmd) {
+            Write-Log "$($target.Name) ($($target.CheckCmd)) already on PATH, skipping."
+            continue
+        }
+
+        $resolved = $null
+        foreach ($probe in $target.PathProbes) {
+            $expanded = [Environment]::ExpandEnvironmentVariables($probe)
+            try {
+                $match = Get-Item $expanded -ErrorAction Stop | Select-Object -First 1
+                if ($match) { $resolved = $match.FullName; break }
+            }
+            catch { }
+        }
+
+        if ($resolved) {
+            if ($userPath -notlike "*$resolved*") {
+                $userPath += ";$resolved"
+                $env:Path += ";$resolved"
+                $added.Add("$($target.Name): $resolved")
+                Write-Log "Added to PATH: $resolved (for $($target.Name))"
+            }
+        }
+        else {
+            Write-Log "$($target.Name) not found in any probe path — may need manual PATH fix."
+            Add-ManualStep "$($target.Name) ($($target.CheckCmd)) is not on PATH and could not be located automatically. Add its bin directory to your user PATH manually."
+        }
+    }
+
+    if ($added.Count -gt 0) {
+        [Environment]::SetEnvironmentVariable("Path", $userPath, "User")
+        $script:Installed.Add("PATH repairs ($($added.Count)): $($added -join '; ')")
+        Set-TaskStatus -Index $TaskIndex -Status "completed" -Details "$($added.Count) path(s) added"
+    }
+    else {
+        $script:Skipped.Add("PATH repair (all tools already on PATH)")
+        Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "All tools already on PATH"
+    }
+    Render-Dashboard -CurrentStep "Repair PATH"
 }
 
 function Set-TaskbarPins {
@@ -711,6 +789,7 @@ foreach ($npkg in $npmPackages) {
 $nvimInstallTask = Add-Task -Title "Install Neovim"
 $nerdFontTask = Add-Task -Title "Install JetBrains Mono Nerd Font"
 $nvimTask = Add-Task -Title "Setup Neovim config"
+$repairPathTask = Add-Task -Title "Repair PATH entries"
 $taskbarPinTask = Add-Task -Title "Pin taskbar items: Vivaldi, Windows Terminal"
 
 Render-Dashboard -CurrentStep "Starting bootstrap"
@@ -799,6 +878,8 @@ if (-not $DryRun -and (Test-CommandExists "npm")) {
 }
 
 Apply-NvimConfigFromDotfiles -RepoUrl $DotfilesRepoUrl -SubPath $DotfilesSubPath -TaskIndex $nvimTask
+
+Repair-PathEntries -TaskIndex $repairPathTask
 
 Set-TaskbarPins -TaskIndex $taskbarPinTask
 
