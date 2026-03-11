@@ -21,7 +21,7 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
 | VS Code | `Microsoft.VisualStudioCode` |
 | WinLibs C Compiler (GCC/POSIX/UCRT) | `BrechtSanders.WinLibs.POSIX.UCRT` |
 
-**Node.js LTS** — installed as a portable zip (no admin required) from nodejs.org to `%LOCALAPPDATA%\Programs\nodejs-portable`, then prepended to user PATH. Skipped if a v20+ portable install is already there. This avoids winget upgrade failures on school machines where Node.js was pre-installed system-wide. Claude Code requires Node.js v20+.
+**Node.js LTS** — installed as a portable zip (no admin required) from nodejs.org to `%LOCALAPPDATA%\Programs\nodejs-portable`. A prepend line is written to your PowerShell profile so every new session picks up the portable install before any system-wide Node.js in machine PATH. Skipped if a v20+ portable install is already there. Claude Code requires Node.js v20+.
 
 **Neovim** — downloaded as a portable zip from GitHub releases, extracted to `%LOCALAPPDATA%\Programs\Neovim`, and added to your user PATH.
 
@@ -82,7 +82,9 @@ Bootstrap shows a live progress dashboard by default — progress bar, per-step 
 ## Notes
 
 - All winget installs use `--scope user` — no admin needed. If a package is blocked by school policy, the script logs it and continues, then lists manual steps at the end.
+- Node.js is installed as a portable zip, not via winget, so it works even on machines where IT pre-installed an older version system-wide. The portable v24 is injected at the front of PATH via the PowerShell profile.
 - After all installs, the script runs a **PATH repair step** that checks whether each tool (`code`, `gcc`, `nvim`, etc.) is on PATH and adds its bin directory automatically if not.
+- To check which `node` is being used: `Get-Command node` (not `where node` — in PowerShell, `where` is aliased to `Where-Object`).
 - AI CLI auth is intentionally manual. After install, open a new PowerShell window and run `claude`, `codex`, or `gemini` to sign in.
 - Launch Neovim once (`nvim`) after first run to let LazyVim install plugins.
 - **Mac users:** The script is Windows-only. For the NerdFont, run: `brew install --cask font-jetbrains-mono-nerd-font`, then set your terminal font to `JetBrainsMono Nerd Font Mono`.
