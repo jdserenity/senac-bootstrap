@@ -247,7 +247,7 @@ function Install-WingetPackage {
                     $installedVer = [Version]$verMatch.Value
                     $requiredVer  = [Version]$MinVersion
                     if ($installedVer -lt $requiredVer) {
-                        Write-Log "$Name version $installedVer is below minimum $requiredVer — upgrading."
+                        Write-Log "$Name version $installedVer is below minimum $requiredVer - upgrading."
                         $needsUpgrade = $true
                     }
                 }
@@ -532,7 +532,7 @@ function Repair-PathEntries {
             }
         }
         else {
-            Write-Log "$($target.Name) not found in any probe path — may need manual PATH fix."
+            Write-Log "$($target.Name) not found in any probe path - may need manual PATH fix."
             Add-ManualStep "$($target.Name) ($($target.CheckCmd)) is not on PATH and could not be located automatically. Add its bin directory to your user PATH manually."
         }
     }
