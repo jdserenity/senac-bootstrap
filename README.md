@@ -15,14 +15,13 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
 
 **Windows apps** (`config/packages.json`, via winget `--scope user`)
 
-| App | Winget ID | Min version |
-|---|---|---|
-| Vivaldi | `Vivaldi.Vivaldi` | — |
-| Node.js LTS | `OpenJS.NodeJS.LTS` | 20.0.0 |
-| VS Code | `Microsoft.VisualStudioCode` | — |
-| WinLibs C Compiler (GCC/POSIX/UCRT) | `BrechtSanders.WinLibs.POSIX.UCRT` | — |
+| App | Winget ID |
+|---|---|
+| Vivaldi | `Vivaldi.Vivaldi` |
+| VS Code | `Microsoft.VisualStudioCode` |
+| WinLibs C Compiler (GCC/POSIX/UCRT) | `BrechtSanders.WinLibs.POSIX.UCRT` |
 
-If a package with a `minVersion` is already installed but too old, the script runs `winget upgrade` on it automatically instead of skipping. This handles e.g. Node.js v18 machines — Claude Code requires Node.js v20+.
+**Node.js LTS** — installed as a portable zip (no admin required) from nodejs.org to `%LOCALAPPDATA%\Programs\nodejs-portable`, then prepended to user PATH. Skipped if a v20+ portable install is already there. This avoids winget upgrade failures on school machines where Node.js was pre-installed system-wide. Claude Code requires Node.js v20+.
 
 **Neovim** — downloaded as a portable zip from GitHub releases, extracted to `%LOCALAPPDATA%\Programs\Neovim`, and added to your user PATH.
 

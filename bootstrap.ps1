@@ -480,6 +480,105 @@ function Install-NeovimPortable {
     Render-Dashboard -CurrentStep "Install Neovim"
 }
 
+function Add-NodePortableToPath {
+    param([string]$InstallDir)
+    # Prepend to user PATH (wins over any user-scope nodejs already there)
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    $parts = ($userPath -split ";" | Where-Object { $_ -ne $InstallDir -and $_ -ne "" })
+    [Environment]::SetEnvironmentVariable("Path", ("$InstallDir;" + ($parts -join ";")), "User")
+    # Prepend in current session immediately
+    $env:Path = "$InstallDir;" + (($env:Path -split ";" | Where-Object { $_ -ne $InstallDir -and $_ -ne "" }) -join ";")
+}
+
+function Install-NodePortable {
+    param([int]$TaskIndex)
+
+    Set-TaskStatus -Index $TaskIndex -Status "running" -Details "Checking existing Node.js"
+    Write-Log "Checking for portable Node.js install..."
+    Render-Dashboard -CurrentStep "Install Node.js"
+
+    if ($DryRun -and $Mac) {
+        $script:Skipped.Add("Node.js portable [dry-run]")
+        Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "Dry run (mac): use nvm or brew install node"
+        Add-ManualStep "Mac: install Node.js 20+: brew install node@22"
+        Render-Dashboard -CurrentStep "Install Node.js"
+        return
+    }
+
+    $installDir = Join-Path $env:LOCALAPPDATA "Programs\nodejs-portable"
+    $nodeExe    = Join-Path $installDir "node.exe"
+
+    # If our portable install exists and is already new enough, just ensure PATH and skip
+    if (Test-Path $nodeExe) {
+        try {
+            $ver      = (& $nodeExe --version 2>$null).Trim()
+            $verMatch = [regex]::Match($ver, '\d+\.\d+\.\d+')
+            if ($verMatch.Success -and ([Version]$verMatch.Value) -ge [Version]"20.0.0") {
+                Write-Log "Node.js portable $ver already at $installDir."
+                Add-NodePortableToPath -InstallDir $installDir
+                $script:Skipped.Add("Node.js portable ($ver)")
+                Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "Already installed ($ver)"
+                Render-Dashboard -CurrentStep "Install Node.js"
+                return
+            }
+        }
+        catch { }
+    }
+
+    if ($DryRun) {
+        $script:Skipped.Add("Node.js portable [dry-run]")
+        Set-TaskStatus -Index $TaskIndex -Status "skipped" -Details "Dry run: would download portable Node.js LTS"
+        Render-Dashboard -CurrentStep "Install Node.js"
+        return
+    }
+
+    $zipPath     = Join-Path $env:TEMP "nodejs-portable.zip"
+    $extractTemp = Join-Path $env:TEMP "nodejs-portable-extract"
+
+    try {
+        Set-TaskStatus -Index $TaskIndex -Status "running" -Details "Fetching latest LTS version info"
+        Write-Log "Fetching Node.js LTS version from nodejs.org..."
+        Render-Dashboard -CurrentStep "Install Node.js"
+
+        $index   = (Invoke-WebRequest -Uri "https://nodejs.org/dist/index.json" -UseBasicParsing).Content | ConvertFrom-Json
+        $lts     = $index | Where-Object { $_.lts } | Select-Object -First 1
+        $nodeVer = $lts.version
+        $zipUrl  = "https://nodejs.org/dist/$nodeVer/node-$nodeVer-win-x64.zip"
+
+        Set-TaskStatus -Index $TaskIndex -Status "running" -Details "Downloading $nodeVer"
+        Write-Log "Downloading $zipUrl ..."
+        Render-Dashboard -CurrentStep "Install Node.js"
+        Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing
+
+        Set-TaskStatus -Index $TaskIndex -Status "running" -Details "Extracting"
+        Write-Log "Extracting to $installDir ..."
+        Render-Dashboard -CurrentStep "Install Node.js"
+        if (Test-Path $extractTemp) { Remove-Item $extractTemp -Recurse -Force }
+        Expand-Archive -Path $zipPath -DestinationPath $extractTemp -Force
+
+        $inner = Get-ChildItem $extractTemp | Select-Object -First 1
+        if (Test-Path $installDir) { Remove-Item $installDir -Recurse -Force }
+        $null = New-Item -ItemType Directory -Force -Path (Split-Path $installDir -Parent)
+        Move-Item $inner.FullName $installDir
+
+        Add-NodePortableToPath -InstallDir $installDir
+
+        Write-Log "Node.js $nodeVer installed to $installDir."
+        $script:Installed.Add("Node.js portable ($nodeVer)")
+        Set-TaskStatus -Index $TaskIndex -Status "installed" -Details "$nodeVer installed to $installDir"
+    }
+    catch {
+        $script:Failed.Add("Node.js portable")
+        Set-TaskStatus -Index $TaskIndex -Status "failed" -Details "Failed: $($_.Exception.Message)"
+        Add-ManualStep "Node.js install failed. Download node-vX-win-x64.zip from https://nodejs.org/en/download, extract to $installDir, and add that folder to your user PATH."
+    }
+    finally {
+        if (Test-Path $zipPath)     { Remove-Item $zipPath -Force -ErrorAction SilentlyContinue }
+        if (Test-Path $extractTemp) { Remove-Item $extractTemp -Recurse -Force -ErrorAction SilentlyContinue }
+    }
+    Render-Dashboard -CurrentStep "Install Node.js"
+}
+
 function Repair-PathEntries {
     param([int]$TaskIndex)
 
@@ -827,9 +926,10 @@ $npmPackageTaskMap = @{}
 foreach ($npkg in $npmPackages) {
     $npmPackageTaskMap[$npkg.package] = Add-Task -Title ("Install {0}" -f $npkg.name)
 }
-$nvimInstallTask = Add-Task -Title "Install Neovim"
-$nerdFontTask = Add-Task -Title "Install JetBrains Mono Nerd Font"
-$nvimTask = Add-Task -Title "Setup Neovim config"
+$nvimInstallTask  = Add-Task -Title "Install Neovim"
+$nerdFontTask     = Add-Task -Title "Install JetBrains Mono Nerd Font"
+$nodePortableTask = Add-Task -Title "Install Node.js LTS (portable)"
+$nvimTask         = Add-Task -Title "Setup Neovim config"
 $repairPathTask = Add-Task -Title "Repair PATH entries"
 $taskbarPinTask = Add-Task -Title "Pin taskbar items: Vivaldi, Windows Terminal"
 
@@ -881,21 +981,24 @@ Install-NeovimPortable -TaskIndex $nvimInstallTask
 
 Install-NerdFont -TaskIndex $nerdFontTask
 
-# Refresh PATH so Node.js installed by winget is available in this session
+# Refresh PATH from registry before installing Node so the portable install
+# can correctly prepend itself to the combined path.
 Write-Log "Refreshing PATH from registry..."
 $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 
-# Fallback: if npm still isn't in PATH (winget MSI may write PATH after its process exits),
-# probe common Node.js install locations and add the first one found.
+Install-NodePortable -TaskIndex $nodePortableTask
+
+# Fallback: if npm is still not on PATH, probe common locations.
 if (-not (Test-CommandExists "npm")) {
     $nodeProbePaths = @(
+        "$env:LOCALAPPDATA\Programs\nodejs-portable",
         "$env:LOCALAPPDATA\Programs\nodejs",
         "$env:ProgramFiles\nodejs",
         "${env:ProgramFiles(x86)}\nodejs"
     )
     foreach ($p in $nodeProbePaths) {
         if (Test-Path (Join-Path $p "npm.cmd")) {
-            $env:Path += ";$p"
+            $env:Path = "$p;$env:Path"
             break
         }
     }

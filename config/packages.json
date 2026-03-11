@@ -5,13 +5,6 @@
     "launchCmd": "vivaldi"
   },
   {
-    "name": "Node.js LTS",
-    "id": "OpenJS.NodeJS.LTS",
-    "scope": "user",
-    "checkCmd": "node",
-    "minVersion": "20.0.0"
-  },
-  {
     "name": "VS Code",
     "id": "Microsoft.VisualStudioCode",
     "scope": "user",
