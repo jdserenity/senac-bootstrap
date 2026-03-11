@@ -24,7 +24,7 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
 
 **Neovim** — downloaded as a portable zip from GitHub releases, extracted to `%LOCALAPPDATA%\Programs\Neovim`, and added to your user PATH.
 
-**JetBrains Mono Nerd Font** — downloaded from the nerd-fonts GitHub releases and installed per-user to `%LOCALAPPDATA%\Microsoft\Windows\Fonts` (no admin needed). Required for LazyVim icons and glyphs to render correctly. After install, set your terminal font to `JetBrainsMono Nerd Font Mono` (Windows Terminal: Settings > Profiles > Appearance > Font face).
+**JetBrains Mono Nerd Font** — downloaded from the nerd-fonts GitHub releases and installed per-user to `%LOCALAPPDATA%\Microsoft\Windows\Fonts` (no admin needed). Fonts are activated immediately via the Win32 `AddFontResource` API — no logoff or manual install step required. Required for LazyVim icons and glyphs to render correctly. After install, set your terminal font to `JetBrainsMono Nerd Font Mono` (Windows Terminal: Settings > Profiles > Appearance > Font face).
 
 **AI CLIs** (`config/npm-packages.json`, via `npm install -g`)
 
@@ -81,6 +81,7 @@ Bootstrap shows a live progress dashboard by default — progress bar, per-step 
 ## Notes
 
 - All winget installs use `--scope user` — no admin needed. If a package is blocked by school policy, the script logs it and continues, then lists manual steps at the end.
+- After all installs, the script runs a **PATH repair step** that checks whether each tool (`code`, `gcc`, `nvim`, etc.) is on PATH and adds its bin directory automatically if not.
 - AI CLI auth is intentionally manual. After install, open a new PowerShell window and run `claude`, `codex`, or `gemini` to sign in.
 - Launch Neovim once (`nvim`) after first run to let LazyVim install plugins.
 - **Mac users:** The script is Windows-only. For the NerdFont, run: `brew install --cask font-jetbrains-mono-nerd-font`, then set your terminal font to `JetBrainsMono Nerd Font Mono`.
